@@ -1,0 +1,61 @@
+# =========================
+# Python junk
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.log
+
+# =========================
+# Environment / Config
+# =========================
+.env
+.venv/
+venv/
+env/
+*.sqlite3
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# =========================
+# Data folders (keep empty structure)
+# =========================
+/data/click/*
+!/data/click/.gitkeep
+
+/data/cleaned_result/*
+!/data/cleaned_result/.gitkeep
+
+# =========================
+# Jupyter & Notebooks
+# =========================
+.ipynb_checkpoints/
+*.ipynb_meta.json
+
+# =========================
+# Temporary or local results
+# =========================
+*.tmp
+*.bak
+*.old
+*.orig
+*.out
+*.jsonl
+*.csv~
+*.parquet~
+
+# =========================
+# OS-level trash
+# =========================
+Thumbs.db
+ehthumbs.db
+Desktop.ini

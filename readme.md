@@ -17,7 +17,7 @@ This will create a cleaned table in `data/cleaned_result/`.
 python merge_table.py
 ```
 It will automatic generate an html report for merged table.
----
+
 
 ## 3. Exploratory Data Analysis (EDA)
 

@@ -1,4 +1,9 @@
 pandas
+numpy
+jupyter
+pyarrow
 plotly
 matplotlib
 seaborn
+networkx
+tqdm

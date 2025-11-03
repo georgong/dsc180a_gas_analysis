@@ -484,33 +484,26 @@ print(f"{time.time() - start_time} seconds used for cleaning and normalizing dty
 
 
 # ========= 这里开始改用 polars 做 join =========
-
-# pandas -> polars
-tasks_pl        = pl.from_pandas(dfs["tasks"])
-assignments_pl  = pl.from_pandas(dfs["assignments"])
-departments_pl  = pl.from_pandas(dfs["department"])
-districts_pl    = pl.from_pandas(dfs["districts"])
-engineers_pl    = pl.from_pandas(dfs["engineers"])
-equipment_pl    = pl.from_pandas(dfs["equipments"])
-task_status_pl  = pl.from_pandas(dfs["task_status"])
-task_types_pl   = pl.from_pandas(dfs["task_types"])
-
-# ---- 1. tasks 维表 join ----
 import gc
+# pandas -> polars
+def to_pl_and_drop(dfs: dict, key: str) -> pl.DataFrame:
+    """
+    从 dfs[key] 转成 polars.DataFrame，
+    转完立刻删掉原来的 pandas df + gc，返回 pl df。
+    """
+    pl_df = pl.from_pandas(dfs[key])
+    del dfs[key]
+    gc.collect()
+    return pl_df
 
-# 如果前面那些 *_norm 变量还在，而且之后不再用，可以一并删
-to_del = [
-    "dfs",
-    "assignments_norm", "departments_norm", "districts_norm",
-    "engineers_norm", "equipment_norm",
-    "task_statuses_norm", "task_types_norm", "tasks_norm",
-]
-
-for name in to_del:
-    if name in globals():
-        del globals()[name]
-
-gc.collect()
+tasks_pl       = to_pl_and_drop(dfs, "tasks")
+assignments_pl = to_pl_and_drop(dfs, "assignments")
+departments_pl = to_pl_and_drop(dfs, "department")
+districts_pl   = to_pl_and_drop(dfs, "districts")
+engineers_pl   = to_pl_and_drop(dfs, "engineers")
+equipment_pl   = to_pl_and_drop(dfs, "equipments")
+task_status_pl = to_pl_and_drop(dfs, "task_status")
+task_types_pl  = to_pl_and_drop(dfs, "task_types")
 
 # 重命名和原来保持一致
 tasks_pl = tasks_pl.rename({

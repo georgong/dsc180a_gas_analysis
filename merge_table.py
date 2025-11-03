@@ -491,8 +491,19 @@ dfs["tasks"] = (dfs["tasks"]
     .merge(dfs["districts"].rename(columns = {"NAME":"DISTRICT"}), left_on = "DISTRICTID",right_on = "W6KEY",how = "left",suffixes=('', '_DISTRICT')).drop(columns=["W6KEY"])
     .merge(dfs["department"].rename(columns = {"NAME":"DEPARTMENT"}), left_on = "DEPARTMENTID",right_on = "W6KEY",how = "left",suffixes=('', '_DEPARTMENT')).drop(columns=["W6KEY"]))
 
+###
+
+dfs["engineers"] = dfs["engineers"].rename(columns = {"STATUS":"STATUSID","DEPARTMENT":"DEPARTMENTID","DISTRICT":"DISTRICTID","TASKTYPE":"TASKTYPEID","W6KEY":"PRIMARY_KEY"})
+id_cols = ["STATUSID", "DEPARTMENTID", "DISTRICTID", "TASKTYPEID"]
+present = [c for c in id_cols if c in dfs["engineers"].columns]
+dfs["engineers"][present] = dfs["engineers"][present].astype(float)
+dfs["assignments"] = dfs["assignments"].merge(dfs["engineers"],left_on="ASSIGNEDENGINEERS",right_on="NAME",how = "outer",suffixes=('_ASSIGNMENTS','_ENGINEERS'))
+dfs["assignments"] = (dfs["assignments"]
+    .merge(dfs["districts"].rename(columns = {"NAME":"DISTRICT"}), left_on = "DISTRICTID",right_on = "W6KEY",how = "left",suffixes=('', '_DISTRICT')).drop(columns=["W6KEY"])
+    .merge(dfs["department"].rename(columns = {"NAME":"DEPARTMENT"}), left_on = "DEPARTMENTID",right_on = "W6KEY",how = "left",suffixes=('', '_DEPARTMENT')).drop(columns=["W6KEY"]))
+
+
 dfs = {"tasks":dfs["tasks"],
-"engineers":dfs["engineers"],
 "assignments":dfs["assignments"]}
 generate_tables_report(dfs = dfs,out_html_path = "Merge_tables_overview.html")
 

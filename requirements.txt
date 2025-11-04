@@ -8,3 +8,4 @@ seaborn
 networkx
 tqdm
 dask[complete]
+scipy

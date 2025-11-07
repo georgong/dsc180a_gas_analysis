@@ -9,7 +9,7 @@
 ## 2. Accessing and Storing Data
 The data is confidental information and cannot be shared with the public.
 
-However, if given data, make Sure all raw data are stored under the folder `data/click/`.
+However, if given data, make sure all raw data are stored under the folder `data/click/`.
 
 This will create a cleaned table in `data/cleaned_result/`. 
 

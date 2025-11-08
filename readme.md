@@ -1,4 +1,3 @@
-````markdown
 # SDGE Gas Department Data Cleaning & EDA
 
 This repository focuses on **data cleaning** and **exploratory data analysis (EDA)** for the **San Diego Gas & Electric (SDGE) Gas Department**.  
@@ -19,7 +18,7 @@ Create a clean Python environment (Python **3.12**) and install all dependencies
 conda create -n sdge python=3.12
 conda activate sdge
 pip install -r requirements.txt
-````
+```
 
 ---
 

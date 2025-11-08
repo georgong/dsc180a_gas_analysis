@@ -3,10 +3,10 @@ import json
 import pandas as pd
 from util.build_report import generate_tables_report
 from tqdm import tqdm
-
+import time
 saved = True
 import os
-
+import polars as pl
 from pathlib import Path
 from typing import Dict, List, Union, Iterable, Tuple
 import pandas as pd
@@ -14,6 +14,9 @@ from util.build_report import generate_tables_report
 import os
 import json
 saved = True
+report = False
+
+start_time = time.time()
 
 def join_csv_by_keywords(
     folder: Union[str, Path],
@@ -158,12 +161,12 @@ def propose_dtype_spec(df: pd.DataFrame) -> dict:
             "SEMPRASUSPENDFLAG","SEMPRASPECIALEQUIPMENTFLAG","SEMPRAREFERFLAG",
             "SEMPRAPREREQUISITESMET","SEMPRADISPATCHREADY",
             "AMOPTOUT","MTUTRANSFLAG","UPLOADPENDINGFLAG","ISCREWTASK","ISSCHEDULED",
-            "INJEOPARDY","PINNED","SEMPRATREE","OCRTREE","OCRHAZMAT","OCRENVIRONMENTAL"
+            "INJEOPARDY","PINNED","SEMPRATREE","OCRTREE","OCRHAZMAT","OCRENVIRONMENTAL","TASKNUMBER"
         ]:
             spec[col] = "Int64"
             continue
 
-        if id_like.search(col) or col.upper() in ["W6KEY","CALLID","TASKNUMBER","FUNCTLOCREFNBR",
+        if id_like.search(col) or col.upper() in ["W6KEY","CALLID","FUNCTLOCREFNBR",
                                                   "CLICKPROJECTCODE","OUTAGEEVENTID","SEMPRAFACILITYID",
                                                   "SEMPRAUSATICKETNBR","SEMPRAACCOUNTNUMBER","SEMPRAMETERBADGENUMBER",
                                                   "SEMPRAINTERRUPTFLAG","SEMPRACPSEQUENCENUMBER",
@@ -476,26 +479,193 @@ dfs = {
     "task_types":     task_types_norm,
     "tasks":          tasks_norm,
 }
+cleaning_time = time.time()
+print(f"{time.time() - start_time} seconds used for cleaning and normalizing dtypes.")
 
-dfs["tasks"] = dfs["tasks"].rename(columns = {"STATUS":"STATUSID","DEPARTMENT":"DEPARTMENTID","DISTRICT":"DISTRICTID","TASKTYPE":"TASKTYPEID","W6KEY":"PRIMARY_KEY"})
+
+# ========= 这里开始改用 polars 做 join =========
+
+# pandas -> polars
+tasks_pl        = pl.from_pandas(dfs["tasks"])
+assignments_pl  = pl.from_pandas(dfs["assignments"])
+departments_pl  = pl.from_pandas(dfs["department"])
+districts_pl    = pl.from_pandas(dfs["districts"])
+engineers_pl    = pl.from_pandas(dfs["engineers"])
+equipment_pl    = pl.from_pandas(dfs["equipments"])
+task_status_pl  = pl.from_pandas(dfs["task_status"])
+task_types_pl   = pl.from_pandas(dfs["task_types"])
+
+# ---- 1. tasks 维表 join ----
+import gc
+
+# 如果前面那些 *_norm 变量还在，而且之后不再用，可以一并删
+to_del = [
+    "dfs",
+    "assignments_norm", "departments_norm", "districts_norm",
+    "engineers_norm", "equipment_norm",
+    "task_statuses_norm", "task_types_norm", "tasks_norm",
+]
+
+for name in to_del:
+    if name in globals():
+        del globals()[name]
+
+gc.collect()
+
+# 重命名和原来保持一致
+tasks_pl = tasks_pl.rename({
+    "STATUS":     "STATUSID",
+    "DEPARTMENT": "DEPARTMENTID",
+    "DISTRICT":   "DISTRICTID",
+    "TASKTYPE":   "TASKTYPEID",
+    "W6KEY":      "TASK_KEY",
+})
+
+# 把 id 列转成 float（和你原来的行为一致）
 id_cols = ["STATUSID", "DEPARTMENTID", "DISTRICTID", "TASKTYPEID"]
-present = [c for c in id_cols if c in dfs["tasks"].columns]
-dfs["tasks"][present] = dfs["tasks"][present].astype(float)
-dfs["task_status"].W6KEY = dfs["task_status"].W6KEY.astype(float)
-dfs["task_types"].W6KEY = dfs["task_types"].W6KEY.astype(float)
-dfs["districts"].W6KEY = dfs["districts"].W6KEY.astype(float)
-dfs["department"].W6KEY = dfs["department"].W6KEY.astype(float)
-dfs["tasks"] = (dfs["tasks"]
-    .merge(dfs["task_status"].rename(columns={"NAME":"STATUS"}), left_on = "STATUSID",right_on = "W6KEY",how = "left",suffixes=('', '_STATUS')).drop(columns=["W6KEY"])
-    .merge(dfs["task_types"].rename(columns={"NAME":"TASKTYPE"}), left_on = "TASKTYPEID",right_on = "W6KEY",how = "left",suffixes=('', '_TASKTYPE')).drop(columns=["W6KEY"])
-    .merge(dfs["districts"].rename(columns = {"NAME":"DISTRICT"}), left_on = "DISTRICTID",right_on = "W6KEY",how = "left",suffixes=('', '_DISTRICT')).drop(columns=["W6KEY"])
-    .merge(dfs["department"].rename(columns = {"NAME":"DEPARTMENT"}), left_on = "DEPARTMENTID",right_on = "W6KEY",how = "left",suffixes=('', '_DEPARTMENT')).drop(columns=["W6KEY"]))
+present = [c for c in id_cols if c in tasks_pl.columns]
+if present:
+    tasks_pl = tasks_pl.with_columns([pl.col(c).cast(pl.Float64) for c in present])
 
-dfs = {"tasks":dfs["tasks"],
-"engineers":dfs["engineers"],
-"assignments":dfs["assignments"]}
-generate_tables_report(dfs = dfs,out_html_path = "Merge_tables_overview.html")
+# 各个维表的 W6KEY → float
+if "W6KEY" in task_status_pl.columns:
+    task_status_pl = task_status_pl.with_columns(pl.col("W6KEY").cast(pl.Float64))
+if "W6KEY" in task_types_pl.columns:
+    task_types_pl = task_types_pl.with_columns(pl.col("W6KEY").cast(pl.Float64))
+if "W6KEY" in districts_pl.columns:
+    districts_pl = districts_pl.with_columns(pl.col("W6KEY").cast(pl.Float64))
+if "W6KEY" in departments_pl.columns:
+    departments_pl = departments_pl.with_columns(pl.col("W6KEY").cast(pl.Float64))
 
+# tasks ← task_status
+task_status_pl2 = task_status_pl.rename({"NAME": "STATUS"})
+tasks_pl = (
+    tasks_pl.join(
+        task_status_pl2,
+        left_on="STATUSID",
+        right_on="W6KEY",
+        how="left",
+        suffix="_STATUS",
+    )
+)
+
+# tasks ← task_types
+task_types_pl2 = task_types_pl.rename({"NAME": "TASKTYPE"})
+tasks_pl = (
+    tasks_pl.join(
+        task_types_pl2,
+        left_on="TASKTYPEID",
+        right_on="W6KEY",
+        how="left",
+        suffix="_TASKTYPE",
+    )
+)
+
+# tasks ← districts
+districts_pl2 = districts_pl.rename({"NAME": "DISTRICT"})
+tasks_pl = (
+    tasks_pl.join(
+        districts_pl2,
+        left_on="DISTRICTID",
+        right_on="W6KEY",
+        how="left",
+        suffix="_DISTRICT",
+    )
+)
+
+# tasks ← department
+departments_pl2 = departments_pl.rename({"NAME": "DEPARTMENT"})
+tasks_pl = (
+    tasks_pl.join(
+        departments_pl2,
+        left_on="DEPARTMENTID",
+        right_on="W6KEY",
+        how="left",
+        suffix="_DEPARTMENT",
+    )
+)
+
+# 删掉中间的 ID 列（跟你原来一样）
+drop_cols_tasks = [c for c in ["DEPARTMENTID","DISTRICTID","TASKTYPEID","STATUSID"] if c in tasks_pl.columns]
+if drop_cols_tasks:
+    tasks_pl = tasks_pl.drop(drop_cols_tasks)
+
+# ---- 2. engineers ↔ assignments，后接 districts / department ----
+
+engineers_pl = engineers_pl.rename({
+    "DEPARTMENT": "DEPARTMENTID",
+    "DISTRICT":   "DISTRICTID",
+    "NAME":      "CREWNAME",
+})
+
+id_cols_eng = ["STATUSID", "DEPARTMENTID", "DISTRICTID", "TASKTYPEID"]
+present_eng = [c for c in id_cols_eng if c in engineers_pl.columns]
+if present_eng:
+    engineers_pl = engineers_pl.with_columns([pl.col(c).cast(pl.Float64) for c in present_eng])
+
+# assignments ← engineers  (full join)
+if ("ASSIGNEDENGINEERS" in assignments_pl.columns) and ("CREWNAME" in engineers_pl.columns):
+    assignments_pl = assignments_pl.join(
+        engineers_pl,
+        left_on="ASSIGNEDENGINEERS",
+        right_on="CREWNAME",
+        how="full",
+        suffix="_ENGINEER",
+    )
+
+# assignments ← districts
+if ("DISTRICTID" in assignments_pl.columns) and ("W6KEY" in districts_pl2.columns):
+    assignments_pl = (
+        assignments_pl.join(
+            districts_pl2,
+            left_on="DISTRICTID",
+            right_on="W6KEY",
+            how="left",
+            suffix="_DISTRICT",
+        )
+    )
+
+# assignments ← department
+if ("DEPARTMENTID" in assignments_pl.columns) and ("W6KEY" in departments_pl2.columns):
+    assignments_pl = (
+        assignments_pl.join(
+            departments_pl2,
+            left_on="DEPARTMENTID",
+            right_on="W6KEY",
+            how="left",
+            suffix="_DEPARTMENT",
+        )
+    )
+
+drop_cols_assign = [c for c in ["DEPARTMENTID","DISTRICTID"] if c in assignments_pl.columns]
+if drop_cols_assign:
+    assignments_pl = assignments_pl.drop(drop_cols_assign)
+
+# ---- 3. tasks ↔ assignments 按 TASK_KEY / TASK 做 full join ----
+
+if "TASK_KEY" in tasks_pl.columns:
+    tasks_pl = tasks_pl.with_columns(pl.col("TASK_KEY").cast(pl.Int64))
+if "TASK" in assignments_pl.columns:
+    assignments_pl = assignments_pl.with_columns(pl.col("TASK").cast(pl.Int64))
+
+result_pl = tasks_pl.join(
+    assignments_pl,
+    left_on="TASK_KEY",
+    right_on="TASK",
+    how="full",
+    suffix="_ASSIGNMENTS",
+)
+
+
+
+# polars -> pandas
+result = result_pl.to_pandas()
+
+dfs = {"tasks": result}
+print(f"{time.time() - cleaning_time} seconds used for joining tables with polars.")
+
+if report:
+    generate_tables_report(dfs=dfs, out_html_path="Merge_tables_overview.html")
 
 if saved:
     OUT_DIR = "data/cleaned_result"
@@ -508,3 +678,4 @@ if saved:
 
     with open(os.path.join(OUT_DIR, "_dtype_book.json"), "w") as f:
         json.dump(dtype_book, f, indent=2)
+

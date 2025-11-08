@@ -17,12 +17,3 @@ This will create a cleaned table in `data/cleaned_result/`.
 python merge_table.py
 ```
 It will automatic generate an html report for merged table.
----
-
-## 3. Exploratory Data Analysis (EDA)
-
-#### 1. Duration Analysis
-<img src="graph/density_plot.png">
-<img src="graph/duration_in_time.jpg">
-<img src="graph/STL.png">
-<img src="graph/average_task_over_time.jpg">

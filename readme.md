@@ -6,7 +6,7 @@ It processes multiple raw operational tables (e.g., `TASKS`, `ASSIGNMENTS`, `ENG
 ---
 
 ## Requirements:
-   requires gas analysis data store in `data/click/` 
+   Requires gas analysis data store in `data/click/` 
    This project is tested on **Anaconda > 24.0** (with Python 3.12).  
    Other version of Anaconda should work without issues.
 
